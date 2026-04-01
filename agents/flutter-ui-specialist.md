@@ -214,16 +214,20 @@ Container(
   ),
   child: Stack(children: [
     child,
-    // Inner top gloss
-    Positioned(
-      top: 2, left: 6, right: 6,
-      child: Container(
-        height: buttonHeight * 0.45,
+    // Inner top gloss — use RadialGradient to avoid hard edges
+    Positioned.fill(
+      child: DecoratedBox(
         decoration: BoxDecoration(
-          borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-          gradient: LinearGradient(
-            begin: Alignment.topCenter, end: Alignment.bottomCenter,
-            colors: [Colors.white.withOpacity(0.35), Colors.transparent],
+          borderRadius: BorderRadius.circular(20),
+          gradient: RadialGradient(
+            center: const Alignment(0.0, -0.6),
+            radius: 0.9,
+            colors: [
+              Colors.white.withOpacity(0.40),
+              Colors.white.withOpacity(0.10),
+              Colors.transparent,
+            ],
+            stops: const [0.0, 0.45, 1.0],
           ),
         ),
       ),
@@ -553,6 +557,434 @@ class _RiveMascotState extends State<RiveMascot> {
 }
 ```
 
+### 14. Dark Theme Game UI — Complete System
+
+Dark mode for games requires a completely different approach than light mode. The background is a deep gradient, cards use low-alpha white overlays on dark, and glow effects replace drop shadows.
+
+```dart
+// Step 1: Define a dark theme constants class (NOT Material ThemeData)
+class _DarkTheme {
+  _DarkTheme._();
+  // Deep purple-space gradient backgrounds
+  static const bg1 = Color(0xFF1A1035);     // Main dark
+  static const bg2 = Color(0xFF0F0A20);     // Deepest
+  static const bg3 = Color(0xFF2D1B69);     // Purple accent (top)
+  // Card surface = transparent with white alpha
+  static const cardBorder = Color(0x33FFFFFF); // 20% white
+  // Text hierarchy via alpha, NOT different greys
+  static const textPrimary = Colors.white;
+  static const textSecondary = Color(0xAAFFFFFF); // 67% white
+  static const textMuted = Color(0x77FFFFFF);     // 47% white
+}
+
+// Step 2: Background is always a 3-stop gradient, never flat black
+Container(
+  decoration: const BoxDecoration(
+    gradient: LinearGradient(
+      begin: Alignment.topCenter,
+      end: Alignment.bottomCenter,
+      colors: [_DarkTheme.bg3, _DarkTheme.bg1, _DarkTheme.bg2],
+      stops: [0.0, 0.4, 1.0], // Purple → dark purple → near-black
+    ),
+  ),
+)
+
+// Step 3: Cards use low-alpha white gradients on dark bg
+Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(20),
+    gradient: const LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [Color(0x44FFFFFF), Color(0x11FFFFFF)], // ~25% → ~7% white
+    ),
+    border: Border.all(color: _DarkTheme.cardBorder, width: 0.5),
+  ),
+)
+
+// Step 4: Game tiles use colored glow instead of dark shadows
+Container(
+  decoration: BoxDecoration(
+    borderRadius: BorderRadius.circular(20),
+    gradient: LinearGradient(
+      begin: Alignment.topLeft,
+      end: Alignment.bottomRight,
+      colors: [
+        tileColor.withOpacity(0.25),  // Subtle color tint
+        tileColor.withOpacity(0.10),
+      ],
+    ),
+    border: Border.all(color: tileColor.withOpacity(0.25), width: 0.5),
+    boxShadow: [
+      BoxShadow(
+        color: tileColor.withOpacity(0.15), // Colored glow, not black shadow
+        blurRadius: 20,
+        offset: const Offset(0, 6),
+      ),
+    ],
+  ),
+)
+```
+
+**Dark mode rules:**
+- Background: deep 3-stop gradient (purple-space), NEVER pure `Colors.black`
+- Cards: `Color(0x44FFFFFF)` → `Color(0x11FFFFFF)` gradient, NOT `Colors.grey[800]`
+- Borders: `Colors.white.withOpacity(0.10)`, NOT `Colors.grey`
+- Shadows: colored glow effects (tile color at 15% alpha), NOT black shadows
+- Text: white at different alpha levels (100%, 67%, 47%), NOT grey shades
+- Icons: white or colored, never grey
+- Selected state: primary color at 18% alpha background, NOT `Colors.white10`
+
+### 15. Floating Bottom Navigation Bar
+
+**CRITICAL**: Game UIs should NEVER use Material `BottomNavigationBar` or `bottomNavigationBar` property. Instead, use a custom floating bar positioned via `Stack` + `Positioned`.
+
+```dart
+// The bar is a Stack child, NOT a Scaffold bottomNavigationBar
+Scaffold(
+  body: Stack(
+    children: [
+      mainContent,
+      // Floating bar overlays content
+      Positioned(
+        left: 0, right: 0, bottom: 0,
+        child: FloatingBottomNav(/* ... */),
+      ),
+    ],
+  ),
+  // NO bottomNavigationBar property!
+)
+
+// The floating bar itself:
+class FloatingBottomNav extends StatelessWidget {
+  static const double _playSize = 62;
+  static const double _playRingSize = 72;
+  static const double _playOverhang = 24;
+
+  @override
+  Widget build(BuildContext context) {
+    final bottomPadding = MediaQuery.of(context).padding.bottom;
+
+    return SizedBox(
+      height: 76 + _playOverhang + bottomPadding,
+      child: Stack(
+        alignment: Alignment.bottomCenter,
+        clipBehavior: Clip.none,
+        children: [
+          // ── Floating rounded rectangle ──
+          Positioned(
+            left: 16, right: 16,       // Margins from screen edges
+            bottom: bottomPadding + 8,  // Above safe area
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(28),
+              child: BackdropFilter(
+                filter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
+                child: Container(
+                  height: 68,
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(28),
+                    gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [
+                        const Color(0xFF1E1545).withOpacity(0.92),
+                        const Color(0xFF120E28).withOpacity(0.96),
+                      ],
+                    ),
+                    border: Border.all(
+                      color: Colors.white.withOpacity(0.10),
+                      width: 1,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.35),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
+                      ),
+                    ],
+                  ),
+                  child: Row(children: [
+                    // Left tabs...
+                    const SizedBox(width: 80), // Gap for raised button
+                    // Right tabs...
+                  ]),
+                ),
+              ),
+            ),
+          ),
+
+          // ── Raised center button (sticks ABOVE the bar) ──
+          Positioned(
+            bottom: bottomPadding + 8 + 68 - _playOverhang - 18,
+            child: _buildPlayButton(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // The raised button: ring + glow + gradient circle
+  Widget _buildPlayButton() {
+    return SizedBox(
+      width: _playRingSize, height: _playRingSize,
+      child: Stack(alignment: Alignment.center, children: [
+        // Outer glow
+        Container(
+          width: _playRingSize, height: _playRingSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            boxShadow: [
+              BoxShadow(color: const Color(0xFFB040D0).withOpacity(0.45), blurRadius: 28, spreadRadius: -2),
+              BoxShadow(color: primaryColor.withOpacity(0.35), blurRadius: 16, spreadRadius: -4),
+            ],
+          ),
+        ),
+        // Ring gradient border
+        Container(
+          width: _playRingSize, height: _playRingSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topCenter, end: Alignment.bottomCenter,
+              colors: [Colors.white.withOpacity(0.18), Colors.white.withOpacity(0.04)],
+            ),
+          ),
+        ),
+        // Dark inner ring
+        Container(
+          width: _playRingSize - 3, height: _playRingSize - 3,
+          decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF140F2A)),
+        ),
+        // Gradient play button
+        Container(
+          width: _playSize, height: _playSize,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [Color(0xFFC084FC), Color(0xFF7C6BC4), Color(0xFF5E4FA2)],
+            ),
+          ),
+          child: const Icon(Icons.play_arrow_rounded, color: Colors.white, size: 34),
+        ),
+      ]),
+    );
+  }
+}
+```
+
+**Floating bar rules:**
+- Positioned via `Stack`, NEVER `bottomNavigationBar` property
+- `margin: left: 16, right: 16` — must NOT touch screen edges
+- `borderRadius: 28` — generous radius for pill shape
+- `BackdropFilter` with `ClipRRect` for glass effect
+- Center button overflows above the bar using `Positioned`
+- Play button has 4 layers: glow → ring border → dark gap → gradient fill
+- Always account for `MediaQuery.of(context).padding.bottom` (safe area)
+
+### 16. 2-Column Game Grid with Colored Tiles
+
+```dart
+// Game tile data model
+class GameTileData {
+  final String title;
+  final String subtitle;
+  final IconData icon;
+  final List<Color> colors; // 3 stops: light → mid → dark
+  final Color glow;         // For shadow/border glow
+  final String? badge;      // e.g. 'NOUVEAU', 'NEW'
+  final VoidCallback onTap;
+}
+
+// Grid layout: 2 columns with 12px gap
+Widget buildGameGrid(List<GameTileData> games) {
+  final rows = <Widget>[];
+  for (var i = 0; i < games.length; i += 2) {
+    rows.add(Row(children: [
+      Expanded(child: GameGridTile(data: games[i])),
+      const SizedBox(width: 12),
+      if (i + 1 < games.length)
+        Expanded(child: GameGridTile(data: games[i + 1]))
+      else
+        const Expanded(child: SizedBox()),
+    ]));
+    if (i + 2 < games.length) rows.add(const SizedBox(height: 12));
+  }
+  return Column(children: rows);
+}
+
+// Individual tile: colored gradient bg + icon box + text + badge + tap spring
+class GameGridTile extends StatefulWidget { /* ... */ }
+class _GameGridTileState extends State<GameGridTile> {
+  bool _pressed = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTapDown: (_) => setState(() => _pressed = true),
+      onTapUp: (_) {
+        setState(() => _pressed = false);
+        HapticFeedback.lightImpact();
+        widget.data.onTap();
+      },
+      onTapCancel: () => setState(() => _pressed = false),
+      // Spring press feedback
+      child: AnimatedScale(
+        scale: _pressed ? 0.95 : 1.0,
+        duration: Duration(milliseconds: _pressed ? 80 : 400),
+        curve: _pressed ? Curves.easeInCubic : Curves.elasticOut,
+        child: Container(
+          height: 170,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft, end: Alignment.bottomRight,
+              colors: [
+                data.colors.first.withOpacity(0.25),
+                data.colors.last.withOpacity(0.10),
+              ],
+            ),
+            border: Border.all(color: data.glow.withOpacity(0.25), width: 0.5),
+            boxShadow: [
+              BoxShadow(color: data.glow.withOpacity(0.15), blurRadius: 20, offset: const Offset(0, 6)),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Gradient icon box
+              Container(
+                width: 44, height: 44,
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(colors: data.colors),
+                  borderRadius: BorderRadius.circular(14),
+                  boxShadow: [BoxShadow(color: data.glow.withOpacity(0.35), blurRadius: 10, offset: const Offset(0, 4))],
+                ),
+                child: Icon(data.icon, color: Colors.white, size: 24),
+              ),
+              const Spacer(),
+              // Title + subtitle
+              Text(data.title, style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w800, height: 1.2)),
+              const SizedBox(height: 4),
+              Text(data.subtitle, style: const TextStyle(color: Color(0x77FFFFFF), fontSize: 10, height: 1.3), maxLines: 2),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+```
+
+**Grid rules:**
+- Tiles are `170px` high, consistent across all tiles
+- Each tile has its own 3-color gradient (light/mid/dark of the same hue)
+- Background is tile color at 25%→10% opacity on dark — NOT the full color
+- Icon box uses the full gradient + colored shadow for pop
+- Badge ('NOUVEAU') positioned top-right with gradient matching tile color
+- `AnimatedScale` on tap: press→0.95 (80ms easeIn), release→1.0 (400ms elasticOut)
+- Stagger animations per tile with `flutter_animate` delay (300ms, 350ms, 400ms...)
+
+### 17. Header Bar with Avatar & Stat Chips
+
+```dart
+// Pattern: Avatar (circle + level badge) → Name + streak badge → Stat chips → Settings
+Row(children: [
+  // Avatar with level badge
+  Stack(clipBehavior: Clip.none, children: [
+    Container(
+      width: 52, height: 52,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        gradient: LinearGradient(colors: [primaryLight, primary]),
+        border: Border.all(color: Colors.white.withOpacity(0.3), width: 2),
+        boxShadow: [BoxShadow(color: primary.withOpacity(0.3), blurRadius: 12, offset: const Offset(0, 4))],
+      ),
+      child: const Icon(Icons.auto_awesome, color: Colors.white, size: 26),
+    ),
+    // Level badge: bottom-left, overlaps avatar
+    Positioned(bottom: -4, left: -4, child: Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(colors: [Color(0xFF42A5F5), Color(0xFF1565C0)]),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: bgColor, width: 2), // Match bg to cut out
+      ),
+      child: Text('$level', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
+    )),
+  ]),
+  const SizedBox(width: 12),
+
+  // Name + streak inline badge + title
+  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+    Row(children: [
+      Text(name, style: TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16)),
+      if (streak > 0) ...[
+        const SizedBox(width: 8),
+        // Inline streak pill
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+          decoration: BoxDecoration(
+            gradient: const LinearGradient(colors: [Color(0xFFFFCC80), Color(0xFFFF8F00)]),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [
+            Icon(Icons.local_fire_department, color: Colors.white, size: 12),
+            Text('$streak jours', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700)),
+          ]),
+        ),
+      ],
+    ]),
+    Text(title, style: TextStyle(color: textMuted, fontSize: 12)),
+  ])),
+
+  // Stat chips (coins, gems)
+  _StatChip(icon: Icons.star_rounded, iconColor: Color(0xFFFFD54F), value: '$coins', showPlus: true),
+  const SizedBox(width: 8),
+  _StatChip(icon: Icons.diamond_rounded, iconColor: Color(0xFF69F0AE), value: '$gems', showPlus: true),
+  const SizedBox(width: 8),
+
+  // Settings button: subtle glass circle
+  Container(
+    width: 38, height: 38,
+    decoration: BoxDecoration(
+      color: Colors.white.withOpacity(0.1),
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.white.withOpacity(0.1)),
+    ),
+    child: Icon(Icons.settings_rounded, color: textSecondary, size: 20),
+  ),
+])
+
+// Stat chip: icon + value + optional "+" add button
+class _StatChip extends StatelessWidget {
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: Colors.white.withOpacity(0.08)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, color: iconColor, size: 16),
+        const SizedBox(width: 4),
+        Text(value, style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w700)),
+        if (showPlus) ...[
+          const SizedBox(width: 4),
+          Container(
+            width: 18, height: 18,
+            decoration: BoxDecoration(color: iconColor.withOpacity(0.25), shape: BoxShape.circle),
+            child: Icon(Icons.add, color: iconColor, size: 12),
+          ),
+        ],
+      ]),
+    );
+  }
+}
+```
+
 ---
 
 ## Decision Tree
@@ -580,6 +1012,13 @@ class _RiveMascotState extends State<RiveMascot> {
 | 3D parallax layers | XL stack + accelerometer | `xl` |
 | Static painter perf | PictureRecorder cache | vanilla Flutter |
 | Heavy animated widget perf | RepaintBoundary isolation | vanilla Flutter |
+| Dark game home screen | Deep gradient bg + alpha-white cards + glow shadows | vanilla Flutter |
+| Floating bottom nav bar | Stack + Positioned + ClipRRect + BackdropFilter | vanilla Flutter |
+| Raised center play button | 4-layer ring (glow → border → gap → gradient) | vanilla Flutter |
+| 2-column game grid | Row + Expanded + colored gradient tiles 170px | vanilla Flutter |
+| Header with stats | Avatar+level badge + stat chips + inline streak | vanilla Flutter |
+| Press-to-shrink feedback | AnimatedScale 0.95→1.0 + elasticOut | vanilla Flutter |
+| ShaderMask gradient text | ShaderMask + LinearGradient on Text widget | vanilla Flutter |
 
 ---
 
@@ -592,6 +1031,15 @@ class _RiveMascotState extends State<RiveMascot> {
 - [ ] Grain/noise on premium cards (noiseIntensity 0.15–0.35)
 - [ ] 3+ visible typography size levels per screen
 - [ ] Dark mode equally polished (test it)
+
+**Dark Mode Specific**
+- [ ] Background is 3-stop gradient (purple-space), NEVER pure black
+- [ ] Cards use `Color(0x44FFFFFF)` → `Color(0x11FFFFFF)` gradient overlays
+- [ ] Text hierarchy via alpha on white (100%, 67%, 47%), NOT grey shades
+- [ ] Shadows are colored glows (tile color at 15% alpha), NOT black drops
+- [ ] Borders are `Colors.white.withOpacity(0.10)`, NOT grey
+- [ ] Bottom nav floats (rounded rectangle, margin from edges), NOT full-width bar
+- [ ] Play/CTA button overflows above bottom nav with ring + glow
 
 **Motion**
 - [ ] Every interactive element: spring or elastic feedback
@@ -636,6 +1084,12 @@ class _RiveMascotState extends State<RiveMascot> {
 | Hardcoded pixel spacing | Breaks scaling | `ThemeExtension` design tokens |
 | `FontWeight.bold` for transitions | Not animatable | `FontVariation('wght', value)` with variable font |
 | `imageFilter` blur without caching | Recalculates every frame | Wrap in `RepaintBoundary` |
+| `Colors.black` as dark bg | Dead, void-like feel | Deep purple gradient (0xFF1A1035 → 0xFF0F0A20) |
+| `Colors.grey[800]` for dark cards | Flat, lifeless | Alpha-white gradient on dark: `Color(0x44FFFFFF)` → `Color(0x11FFFFFF)` |
+| `bottomNavigationBar:` in Scaffold | Full-width, stuck to edges | Stack + Positioned floating bar with margin 16 |
+| Black `BoxShadow` in dark mode | Invisible / harsh | Colored glow: `tileColor.withOpacity(0.15)` |
+| `Positioned(top:2, left:5, right:5)` gloss | Hard edges create visible rectangle | `Positioned.fill` + `RadialGradient` for smooth highlight |
+| Text with `Colors.grey` shades | Inconsistent, not luminous | White at different alphas: 100%, 67% (0xAA), 47% (0x77) |
 
 ---
 
@@ -649,18 +1103,31 @@ class _RiveMascotState extends State<RiveMascot> {
 | **Candy Crush** | Per-level rotating candy palette | Color freshness = replayability |
 | **Google Maps** | AI-predicted UI states pre-animated before user acts | Pre-warm animations 200ms before gesture lands |
 | **Duolingo** | Heavy haptics on every success event | Haptic-visual-audio triple sync = dopamine hit |
+| **Word Life/Wordscapes** | Dark gradient bg + floating bottom nav + 2-col game grid | Dark = immersive. Floating bar = premium feel. Color tiles = energy + variety |
+| **Clash Royale** | Raised center play button sticking above bottom nav | CTA button breaking container = visual hierarchy + dopamine invitation |
 
 ---
 
 ## Working Method
 
 1. **Read the code** — understand existing widget tree, colors, navigation
-2. **Audit every flat element** — Card, ElevatedButton, plain Container, default colors
-3. **Upgrade color system first** — gradients, depth, Material You seeds
-4. **Add surface depth** — shadows, glass, grain overlays
-5. **Animate interactions** — spring feedback on every tap, state transitions
-6. **Add sensation** — haptics synchronized with every motion event
-7. **Celebrate achievements** — confetti + Rive + heavy haptic for major events
-8. **Profile** — Flutter DevTools, fix jank, verify 60/120fps before done
+2. **Determine light vs dark** — game UIs should default to dark theme (immersive), utility UIs to light
+3. **Audit every flat element** — Card, ElevatedButton, plain Container, default colors, `bottomNavigationBar`
+4. **Upgrade color system first** — gradients, depth, Material You seeds OR dark alpha-white system
+5. **Add surface depth** — shadows (light mode) or colored glows (dark mode), glass, grain overlays
+6. **Build layout structure** — floating nav bars, 2-column grids, header stat bars
+7. **Animate interactions** — spring feedback on every tap, AnimatedScale press, staggered entrance
+8. **Add sensation** — haptics synchronized with every motion event
+9. **Celebrate achievements** — confetti + Rive + heavy haptic for major events
+10. **Profile** — Flutter DevTools, fix jank, verify 60/120fps before done
 
 Always produce **full widget code**, never snippets. Always include `pubspec.yaml` additions. Always explain *why* each visual choice was made. Always flag which techniques require Impeller (Flutter 3.27+).
+
+**For dark game UIs specifically:**
+- Use `Stack` for bottom nav (floating), never Scaffold's `bottomNavigationBar`
+- Build `_DarkTheme` constants class with deep gradient colors + alpha-white text hierarchy
+- Every card = low-alpha white gradient overlay, never opaque grey
+- Every icon box = full-color gradient + colored glow shadow
+- ShaderMask for gradient text on headings
+- AnimatedScale (0.95 press, elasticOut release) on every tappable tile
+- Stagger entrance animations with `flutter_animate` delay per tile
